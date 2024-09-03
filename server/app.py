@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response, jsonify
+from flask import Flask, request, make_response, jsonify, abort
 from flask_cors import CORS
 from flask_migrate import Migrate
 
@@ -14,13 +14,50 @@ migrate = Migrate(app, db)
 
 db.init_app(app)
 
-@app.route('/messages')
-def messages():
-    return ''
 
-@app.route('/messages/<int:id>')
+@app.route('/messages', methods=['GET', 'POST'])
+def messages():
+    # Handle GET request: Return all messages
+    if request.method == 'GET':
+        messages = Message.query.order_by(Message.created_at.asc()).all()
+        return jsonify([message.to_dict() for message in messages]), 200
+
+    # Handle POST request: Create a new message
+    elif request.method == 'POST':
+        data = request.get_json()
+
+        if 'body' not in data or 'username' not in data:
+            return jsonify({"error": "Body and username are required"}), 400
+
+        new_message = Message(body=data['body'], username=data['username'])
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify(new_message.to_dict()), 201
+
+@app.route('/messages/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
 def messages_by_id(id):
-    return ''
+    # Fetch the message by ID
+    message = Message.query.get_or_404(id)
+
+    # Handle GET request: Return the message as JSON
+    if request.method == 'GET':
+        return jsonify(message.to_dict()), 200
+
+    # Handle PATCH request: Update the message body
+    elif request.method == 'PATCH':
+        data = request.get_json()
+        if 'body' not in data:
+            return jsonify({"error": "Body is required"}), 400
+        message.body = data['body']
+        db.session.commit()
+        return jsonify(message.to_dict()), 200
+
+    # Handle DELETE request: Delete the message
+    elif request.method == 'DELETE':
+        db.session.delete(message)
+        db.session.commit()
+        return jsonify({"message": "Message deleted"}), 200
 
 if __name__ == '__main__':
     app.run(port=5555)
